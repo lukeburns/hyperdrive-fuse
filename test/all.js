@@ -1,16 +1,21 @@
 const p = require('path')
 const fs = require('fs')
+const os = require('os')
 const test = require('tape')
-const hyperdrive = require('hyperdrive')
-const ram = require('random-access-memory')
+const Corestore = require('corestore')
 const rimraf = require('rimraf')
 const xattr = require('fs-xattr')
-const Fuse = require('fuse-native')
+const Hyperdrive = require('hyperdrive')
 
 const { HyperdriveFuse } = require('..')
 
-test('can read/write a small file', async t => {
-  const drive = hyperdrive(ram)
+function createDrive () {
+  const dir = fs.mkdtempSync(p.join(os.tmpdir(), 'hyperdrive-fuse-'))
+  return new Hyperdrive(new Corestore(dir))
+}
+
+test('can read/write a small file', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -35,8 +40,8 @@ test('can read/write a small file', async t => {
   t.end()
 })
 
-test('can read/write a large file', async t => {
-  const drive = hyperdrive(ram)
+test('can read/write a large file', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -61,8 +66,8 @@ test('can read/write a large file', async t => {
   t.end()
 })
 
-test('can read/write a huge file', async t => {
-  const drive = hyperdrive(ram)
+test('can read/write a huge file', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -87,8 +92,8 @@ test('can read/write a huge file', async t => {
   t.end()
 })
 
-test('can list a directory', async t => {
-  const drive = hyperdrive(ram)
+test('can list a directory', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -97,16 +102,16 @@ test('can list a directory', async t => {
   await fuse.mount()
 
   try {
-    await new Promise(resolve => {
-      fs.mkdir('./mnt/a', err => {
+    await new Promise((resolve) => {
+      fs.mkdir('./mnt/a', (err) => {
         t.error(err, 'no error')
-        fs.writeFile('./mnt/a/1', '1', err => {
+        fs.writeFile('./mnt/a/1', '1', (err) => {
           t.error(err, 'no error')
-          fs.writeFile('./mnt/a/2', '2', err => {
+          fs.writeFile('./mnt/a/2', '2', (err) => {
             t.error(err, 'no error')
             fs.readdir('./mnt/a', (err, list) => {
               t.error(err, 'no error')
-              t.same(list, ['1', '2'])
+              t.same(list.sort(), ['1', '2'].sort())
               return resolve()
             })
           })
@@ -122,8 +127,8 @@ test('can list a directory', async t => {
   t.end()
 })
 
-test('can create and read from a symlink', async t => {
-  const drive = hyperdrive(ram)
+test('can create and read from a symlink', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -132,10 +137,10 @@ test('can create and read from a symlink', async t => {
   await fuse.mount()
 
   try {
-    await new Promise(resolve => {
-      fs.writeFile('./mnt/a', 'hello', err => {
+    await new Promise((resolve) => {
+      fs.writeFile('./mnt/a', 'hello', (err) => {
         t.error(err, 'no error')
-        fs.symlink('a', './mnt/b', err => {
+        fs.symlink('a', './mnt/b', (err) => {
           t.error(err, 'no error')
           fs.readFile('./mnt/b', { encoding: 'utf-8' }, (err, content) => {
             t.error(err, 'no error')
@@ -154,8 +159,8 @@ test('can create and read from a symlink', async t => {
   t.end()
 })
 
-test('can get/set/list xattrs', async t => {
-  const drive = hyperdrive(ram)
+test('can get/set/list xattrs', async (t) => {
+  const drive = createDrive()
   const fuse = new HyperdriveFuse(drive, './mnt')
 
   const onint = () => cleanup(fuse, true)
@@ -179,30 +184,27 @@ test('can get/set/list xattrs', async t => {
   t.end()
 })
 
-test('uid/gid are normalized on read', async t => {
-  const drive = hyperdrive(ram)
-  const fuse = new HyperdriveFuse(drive, './mnt')
+test('uid/gid are normalized on read', async (t) => {
+  const drive = createDrive()
+  await drive.ready()
+  await drive.put('/a', Buffer.from('hello'), { metadata: { uid: 0, gid: 0 } })
 
+  const fuse = new HyperdriveFuse(drive, './mnt')
   const onint = () => cleanup(fuse, true)
   process.on('SIGINT', onint)
 
   await fuse.mount()
 
   try {
-    await new Promise(resolve => {
-      drive.writeFile('a', 'hello', { uid: 0, gid: 0 }, err => {
+    const e = await drive.entry('/a', { follow: true, wait: true })
+    t.is(e && e.value && e.value.metadata && e.value.metadata.uid, 0)
+    t.is(e && e.value && e.value.metadata && e.value.metadata.gid, 0)
+    await new Promise((resolve) => {
+      fs.stat('./mnt/a', (err, stat) => {
         t.error(err, 'no error')
-        drive.stat('a', (err, stat) => {
-          t.error(err, 'no error')
-          t.same(stat.uid, 0)
-          t.same(stat.gid, 0)
-          fs.stat('./mnt/a', (err, stat) => {
-            t.error(err, 'no error')
-            t.same(stat.uid, process.getuid())
-            t.same(stat.gid, process.getgid())
-            return resolve()
-          })
-        })
+        t.is(stat.uid, process.getuid())
+        t.is(stat.gid, process.getgid())
+        return resolve()
       })
     })
   } catch (err) {
@@ -214,8 +216,10 @@ test('uid/gid are normalized on read', async t => {
   t.end()
 })
 
-test('a relative symlink will not read files outside the sandbox', async t => {
-  const drive = hyperdrive(ram)
+test('a relative symlink will not read files outside the sandbox', async (t) => {
+  const drive = createDrive()
+  await drive.ready()
+  await drive.symlink('/test', '../test.txt')
   const fuse = new HyperdriveFuse(drive, './mnt')
   const onint = () => cleanup(fuse, true)
   process.on('SIGINT', onint)
@@ -224,12 +228,7 @@ test('a relative symlink will not read files outside the sandbox', async t => {
   await fuse.mount()
 
   try {
-    await new Promise(resolve => {
-      drive.symlink('../test.txt', 'test', err => {
-        t.error(err, 'no error')
-        return resolve()
-      })
-    })
+    await new Promise((resolve) => setImmediate(resolve))
     try {
       const contents = await fs.promises.readFile('./mnt/test', { encoding: 'utf8' })
       t.false(contents)
@@ -246,8 +245,10 @@ test('a relative symlink will not read files outside the sandbox', async t => {
   t.end()
 })
 
-test('an absolute symlink will not read files outside the sandbox', async t => {
-  const drive = hyperdrive(ram)
+test('an absolute symlink will not read files outside the sandbox', async (t) => {
+  const drive = createDrive()
+  await drive.ready()
+  await drive.symlink('/test', p.resolve('./mnt', '../test.txt'))
   const fuse = new HyperdriveFuse(drive, './mnt')
   const onint = () => cleanup(fuse, true)
   process.on('SIGINT', onint)
@@ -256,19 +257,13 @@ test('an absolute symlink will not read files outside the sandbox', async t => {
   await fuse.mount()
 
   try {
-    await new Promise(resolve => {
-      const target = p.resolve('./mnt', '../test.txt')
-      drive.symlink(target, 'test', err => {
-        t.error(err, 'no error')
-        return resolve()
-      })
-    })
+    await new Promise((resolve) => setImmediate(resolve))
     try {
       const contents = await fs.promises.readFile('./mnt/test', { encoding: 'utf8' })
       t.false(contents)
     } catch (err) {
       t.true(err)
-      t.same(err.errno, -2)
+      t.is(err.code, 'ENOENT')
     }
   } catch (err) {
     t.fail(err)
@@ -280,19 +275,22 @@ test('an absolute symlink will not read files outside the sandbox', async t => {
   t.end()
 })
 
-test('cannot open a writable file descriptor on a non-writable drive', async t => {
-  const drive = hyperdrive(ram)
-  const clone = await new Promise(resolve => {
-    drive.writeFile('hello', 'world', () => {
-      const clone = hyperdrive(ram, drive.key)
-      clone.ready(() => {
-        const s1 = clone.replicate(true, { live: true })
-        const s2 = drive.replicate(false, { live: true })
-        s1.pipe(s2).pipe(s1)
-        return resolve(clone)
-      })
-    })
-  })
+test('cannot open a writable file descriptor on a non-writable drive', async (t) => {
+  const a = new Corestore(fs.mkdtempSync(p.join(os.tmpdir(), 'hyperdrive-fuse-a-')))
+  const b = new Corestore(fs.mkdtempSync(p.join(os.tmpdir(), 'hyperdrive-fuse-b-')))
+  const drive = new Hyperdrive(a)
+  const clone = new Hyperdrive(b, drive.key)
+  await drive.ready()
+  await clone.ready()
+
+  await drive.put('/hello', Buffer.from('world'))
+  const s1 = a.replicate(true)
+  const s2 = b.replicate(false)
+  s1.pipe(s2).pipe(s1)
+  while (clone.version < drive.version) {
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+  await clone.get('/hello', { wait: true })
 
   const fuse = new HyperdriveFuse(clone, './mnt')
   const onint = () => cleanup(fuse, true)
@@ -307,40 +305,21 @@ test('cannot open a writable file descriptor on a non-writable drive', async t =
   }
 
   await cleanup(fuse)
+  s1.destroy()
+  s2.destroy()
   process.removeListener('SIGINT', onint)
   t.end()
 })
 
-test.skip('a hanging get will be aborted after a timeout', async t => {
-  const drive = hyperdrive(ram)
-  const handlers = getHandlers(drive, './mnt')
-
-  // Create an artificial hang
-  handlers.chmod = (path, uid, gid, cb) => {}
-
-  const { destroy } = await mount(drive, handlers, './mnt')
-  process.once('SIGINT', () => cleanup(destroy))
-
-  await new Promise(resolve => {
-    fs.writeFile('./mnt/hello', 'goodbye', err => {
-      t.error(err, 'no error')
-      fs.chmod('./mnt/hello', 777, err => {
-        t.true(err)
-        t.same(err.errno, Fuse.EIO)
-        return resolve()
-      })
-    })
-  })
-
-  await cleanup(destroy)
+test.skip('a hanging get will be aborted after a timeout', async (t) => {
   t.end()
 })
 
 async function writeData (numSlices, sliceSize) {
   const content = Buffer.alloc(sliceSize * numSlices).fill('0123456789abcdefghijklmnopqrstuvwxyz')
-  let slices = new Array(numSlices).fill(0).map((_, i) => content.slice(sliceSize * i, sliceSize * (i + 1)))
+  const slices = new Array(numSlices).fill(0).map((_, i) => content.slice(sliceSize * i, sliceSize * (i + 1)))
   let fd = await open('./mnt/hello', 'w+')
-  for (let slice of slices) {
+  for (const slice of slices) {
     await write(fd, slice, 0)
   }
   await close(fd)
@@ -353,7 +332,7 @@ async function readData (content, numSlices, sliceSize, readSize) {
   do {
     const pos = numReads * readSize
     const buf = Buffer.alloc(readSize)
-    let bytesRead = await read(fd, buf, 0, readSize, pos)
+    const bytesRead = await read(fd, buf, 0, readSize, pos)
     if (!buf.slice(0, bytesRead).equals(content.slice(pos, pos + readSize))) {
       throw new Error(`Slices do not match at position: ${pos}`)
     }
@@ -364,7 +343,7 @@ async function readData (content, numSlices, sliceSize, readSize) {
 async function cleanup (fuse, exit) {
   await fuse.unmount()
   return new Promise((resolve, reject) => {
-    rimraf('./mnt', err => {
+    rimraf('./mnt', (err) => {
       if (err) return reject(err)
       if (exit) return process.exit(0)
       return resolve()
@@ -401,9 +380,9 @@ function open (f, flags) {
 
 function close (fd) {
   return new Promise((resolve, reject) => {
-    fs.close(fd, err => {
+    fs.close(fd, (err) => {
       if (err) return reject(err)
-      return resolve(err)
+      return resolve()
     })
   })
 }
