@@ -32,11 +32,11 @@
   },
   "homepage": "https://github.com/andrewosh/hyperdrive-fuse#readme",
   "dependencies": {
-    "@zkochan/fuse-native": "file:../fuse-native",
+    "@zkochan/fuse-native": "github:lukeburns/fuse-native",
     "corestore": "^7.0.0",
     "debug": "^4.3.0",
     "filesystem-constants": "^1.0.0",
-    "hyperdrive": "file:../hyperdrive",
+    "hyperdrive": "^13.3.2",
     "hyperswarm": "^4.17.0",
     "unix-path-resolve": "^1.0.2",
     "z32": "^1.1.0"

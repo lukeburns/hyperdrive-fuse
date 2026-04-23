@@ -200,19 +200,17 @@ async function cmdMount (rest) {
   }
 
   const keyZ32 = result.key
-  const discZ32 = z32.encode(drive.discoveryKey)
   const w = result.drive && result.drive.writable
   const ro = w ? '' : `  (read-only: open without --key for a new writable drive, or use storage that has the write key for this key.)\n`
   const swarmLine = noSwarm
-    ? '  Hyperswarm: disabled (--no-swarm)\n'
-    : '  Hyperswarm: DHT P2P replication enabled (client + server on discovery key)\n' +
-    `  Discovery (z32):  ${discZ32}  (topic for swarm.join)\n`
+    ? '  Hyperswarm: disabled\n'
+    : `  Hyperswarm key: ${z32.encode(swarm.keyPair.publicKey)}\n`
   process.stderr.write(
-    `Hyperdrive FUSE mounted\n  Mount:  ${result.mnt}\n  Storage: ${storage}\n  Public key (z32): ${keyZ32}\n` +
+    `Hyperdrive FUSE mounted\n  Mount:  ${result.mnt}\n  Storage: ${storage}\n  Drive key: ${keyZ32}\n` +
     swarmLine +
     (w ? '  Mode:  read/write\n' : '  Mode:  read-only\n') +
     ro +
-    `  Node PID: ${process.pid} (keep this process running — if it stops, the mount returns ENXIO / "Device not configured".)\n` +
+    `  Node PID: ${process.pid}\n` +
     `  Press Ctrl+C to unmount.\n`
   )
 
