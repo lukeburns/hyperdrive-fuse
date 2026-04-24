@@ -7,7 +7,7 @@ const EOPNOTSUPP = os.constants.errno.EOPNOTSUPP
 
 const z32 = require('z32')
 const fsConstants = require('filesystem-constants')
-const Fuse = require('@zkochan/fuse-native')
+const Fuse = require('fuse-native')
 const { translate, linux } = fsConstants
 
 const createPosixAdapter = require('./lib/posix-adapter')
