@@ -285,6 +285,9 @@ class HyperdriveFuse {
       log('getxattr', path, name)
       self.drive.getxattr(path, name, position, (err, value) => {
         if (err) {
+          if (platform === 'darwin' && name && name.startsWith('com.apple')) {
+            return cb(Fuse.EOPNOTSUPP, null)
+          }
           if (err.code === 'ENODATA') {
             return cb(platform === 'darwin' ? -93 : Fuse.ENODATA, null)
           }
@@ -301,6 +304,9 @@ class HyperdriveFuse {
       log('listxattr', path)
       self.drive.listxattr(path, (err, list) => {
         if (err) {
+          if (platform === 'darwin') {
+            return cb(0, [])
+          }
           if (err.errno != null) {
             return cb(-err.errno, null)
           }
