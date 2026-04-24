@@ -46,7 +46,6 @@
   },
   "devDependencies": {
     "fs-xattr": "^0.3.0",
-    "hyperdrives-fuse": "github:lukeburns/hyperdrives-fuse",
     "rimraf": "^2.6.3",
     "standard": "^17.1.2",
     "tape": "^4.10.1"
